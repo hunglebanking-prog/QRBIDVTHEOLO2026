@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+
+<meta charset="UTF-8">
+<title>QR thu hộ Trường học</title>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+<style>
+
+body{
+font-family:Arial;
+margin:0;
+background:#f3f3f3;
+}
+
+.header{
+background:linear-gradient(90deg,#0c7c6a,#0f9a8a);
+color:white;
+padding:40px;
+text-align:center;
+}
+
+.header h1{
+margin:0;
+font-size:32px;
+}
+
+.contact{
+margin-top:10px;
+font-size:18px;
+color:yellow;
+font-weight:bold;
+}
+
+.container{
+padding:30px;
+text-align:center;
+}
+
+.controls{
+margin-bottom:20px;
+}
+
+input,select,button{
+padding:10px;
+font-size:15px;
+margin:5px;
+border-radius:6px;
+border:1px solid #ccc;
+}
+
+button{
+background:#0c7c6a;
+color:white;
+cursor:pointer;
+border:none;
+}
+
+.qrGrid{
+display:grid;
+grid-template-columns:repeat(auto-fill,220px);
+gap:20px;
+justify-content:center;
+}
+
+.qr{
+background:white;
+padding:15px;
+border-radius:10px;
+box-shadow:0 3px 10px rgba(0,0,0,0.2);
+}
+
+.qr img{
+width:180px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="header">
+
+<h1>PGD ĐÔNG HÀ - BIDV QUẢNG TRỊ - QR thu hộ Trường học</h1>
+
+<div class="contact">
+Lê Mạnh Hùng - PGD Đông Hà - ĐT: 0914.179.989
+</div>
+
+</div>
+
+<div class="container">
+
+<div class="controls">
+
+<input type="file" id="fileInput">
+
+<input id="search" placeholder="🔍 Tìm tên / STK / StudentID">
+
+<select id="classFilter">
+<option value="">Tất cả lớp</option>
+</select>
+
+<button onclick="downloadAll()">Tải toàn bộ QR (ZIP)</button>
+
+<button onclick="printQR()">In QR A4</button>
+
+</div>
+
+<div id="qrContainer" class="qrGrid"></div>
+
+</div>
+
+<script>
+
+let data=[];
+
+document.getElementById("fileInput").addEventListener("change",function(e){
+
+const reader=new FileReader();
+
+reader.onload=function(e){
+
+const workbook=XLSX.read(e.target.result,{type:'binary'});
+
+const sheet=workbook.Sheets[workbook.SheetNames[0]];
+
+data=XLSX.utils.sheet_to_json(sheet);
+
+initClassFilter();
+
+render(data);
+
+};
+
+reader.readAsBinaryString(e.target.files[0]);
+
+});
+
+function createQR(row){
+
+return `https://img.vietqr.io/image/BIDV-${row.AccountNumber}-compact2.png?amount=${row.Amount}&addInfo=${encodeURIComponent(row.Remark)}&accountName=${encodeURIComponent(row.AccountName)}`;
+
+}
+
+function cleanName(name){
+
+return name
+.normalize("NFD")
+.replace(/[\u0300-\u036f]/g,"")
+.replace(/\s+/g,"_");
+
+}
+
+function fileName(row){
+
+let name=cleanName(row.AccountName);
+
+return `${row.Class}_${row.StudentID}_${name}.png`;
+
+}
+
+function render(rows){
+
+let container=document.getElementById("qrContainer");
+
+container.innerHTML="";
+
+rows.forEach(row=>{
+
+let qr=createQR(row);
+
+let div=document.createElement("div");
+
+div.className="qr";
+
+div.innerHTML=`
+
+<b>${row.AccountName}</b><br>
+
+${row.Class} - ${row.StudentID}<br><br>
+
+<img src="${qr}"><br><br>
+
+<a href="${qr}" download="${fileName(row)}">
+Tải QR
+</a>
+
+`;
+
+container.appendChild(div);
+
+});
+
+}
+
+function initClassFilter(){
+
+let classes=[...new Set(data.map(r=>r.Class))];
+
+let select=document.getElementById("classFilter");
+
+classes.forEach(c=>{
+
+let option=document.createElement("option");
+
+option.value=c;
+
+option.textContent=c;
+
+select.appendChild(option);
+
+});
+
+}
+
+document.getElementById("search").addEventListener("keyup",filter);
+
+document.getElementById("classFilter").addEventListener("change",filter);
+
+function filter(){
+
+let keyword=document.getElementById("search").value.toLowerCase();
+
+let cls=document.getElementById("classFilter").value;
+
+let filtered=data.filter(r=>{
+
+return(
+
+(!cls || r.Class==cls) &&
+
+(
+
+String(r.AccountName).toLowerCase().includes(keyword) ||
+
+String(r.AccountNumber).toLowerCase().includes(keyword) ||
+
+String(r.StudentID).toLowerCase().includes(keyword)
+
+)
+
+);
+
+});
+
+render(filtered);
+
+}
+
+async function downloadAll(){
+
+const zip=new JSZip();
+
+for(let row of data){
+
+let url=createQR(row);
+
+let res=await fetch(url);
+
+let blob=await res.blob();
+
+zip.file(fileName(row),blob);
+
+}
+
+zip.generateAsync({type:"blob"}).then(content=>{
+
+saveAs(content,"QR_HOC_SINH.zip");
+
+});
+
+}
+
+function printQR(){
+
+let printWindow=window.open("","","width=900,height=700");
+
+let html="";
+
+data.forEach(row=>{
+
+let qr=createQR(row);
+
+html+=`
+
+<div style="display:inline-block;width:200px;text-align:center;margin:10px">
+
+<img src="${qr}" width="150"><br>
+
+${row.Class}_${row.StudentID}_${row.AccountName}
+
+</div>
+
+`;
+
+});
+
+printWindow.document.write(html);
+
+printWindow.print();
+
+}
+
+</script>
+
+</body>
+
+</html>
